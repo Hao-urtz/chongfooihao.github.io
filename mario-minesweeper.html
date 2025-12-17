@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mario Minesweeper</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        :root {
+            --bg-color: #5c94fc; /* Mario Sky Blue */
+            --ground-color: #c84c0c;
+            --block-size: 40px;
+            --grid-gap: 2px;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            color: white;
+            user-select: none;
+        }
+
+        h1 {
+            text-shadow: 4px 4px 0px #000;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 24px;
+            line-height: 1.5;
+        }
+
+        .game-container {
+            background-color: #000;
+            padding: 10px;
+            border-radius: 4px;
+            box-shadow: 10px 10px 0px rgba(0,0,0,0.3);
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #c84c0c; /* Brick color */
+            border: 4px solid #fff;
+            font-size: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, var(--block-size));
+            grid-template-rows: repeat(10, var(--block-size));
+            gap: var(--grid-gap);
+            background-color: #000;
+        }
+
+        .cell {
+            width: var(--block-size);
+            height: var(--block-size);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        /* Hidden State - Question Block */
+        .cell.hidden {
+            background-color: #e89619; /* Gold */
+            box-shadow: inset 4px 4px 0px #ffce73, inset -4px -4px 0px #b05d00;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        .cell.hidden::after {
+            content: "?";
+            color: #7f3806;
+            font-weight: bold;
+            font-size: 20px;
+            text-shadow: 1px 1px 0px #ffce73;
+        }
+
+        /* Animation for moving blocks */
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+
+        /* Stagger animations slightly for a wave effect */
+        .cell:nth-child(2n).hidden { animation-delay: 0.1s; }
+        .cell:nth-child(3n).hidden { animation-delay: 0.2s; }
+        .cell:nth-child(5n).hidden { animation-delay: 0.3s; }
+        .cell:nth-child(7n).hidden { animation-delay: 0.4s; }
+
+        /* Revealed State - Empty Block */
+        .cell.revealed {
+            background-color: #bcafa5; /* Stone/Empty block color */
+            box-shadow: inset 2px 2px 0px #dcd3cd, inset -2px -2px 0px #8a7f78;
+            color: #333;
+        }
+
+        .cell.revealed.mine {
+            background-color: #c0392b;
+            animation: explode 0.5s ease-out;
+        }
+
+        @keyframes explode {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .cell.flagged {
+            background-color: #e89619;
+            box-shadow: inset 4px 4px 0px #ffce73, inset -4px -4px 0px #b05d00;
+        }
+        .cell.flagged::after {
+            content: "🚩"; /* Or M for Mario */
+            font-size: 20px;
+            color: red;
+            text-shadow: none;
+        }
+
+        /* Number Colors */
+        .cell[data-num="1"] { color: #0000ff; }
+        .cell[data-num="2"] { color: #008000; }
+        .cell[data-num="3"] { color: #ff0000; }
+        .cell[data-num="4"] { color: #000080; }
+        .cell[data-num="5"] { color: #800000; }
+        .cell[data-num="6"] { color: #008080; }
+        .cell[data-num="7"] { color: #000000; }
+        .cell[data-num="8"] { color: #808080; }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        button {
+            font-family: 'Press Start 2P', cursive;
+            background-color: #2ecc71;
+            border: 4px solid #fff;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            box-shadow: 4px 4px 0px #000;
+            transition: transform 0.1s;
+        }
+
+        button:active {
+            transform: translate(4px, 4px);
+            box-shadow: none;
+        }
+
+        .game-over-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        
+        .game-over-content {
+            background: #fff;
+            color: #000;
+            padding: 40px;
+            text-align: center;
+            border: 4px solid #c84c0c;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1>SUPER<br>MINESWEEPER</h1>
+
+    <div class="game-container">
+        <div class="header">
+            <div id="mines-count">BOMBS: 10</div>
+            <div id="timer">TIME: 000</div>
+        </div>
+        <div class="grid" id="grid"></div>
+    </div>
+
+    <div class="controls">
+        <button onclick="resetGame()">RESET LEVEL</button>
+    </div>
+
+    <div class="game-over-modal" id="modal">
+        <div class="game-over-content">
+            <h2 id="modal-title">GAME OVER</h2>
+            <p id="modal-msg">Too bad!</p>
+            <br>
+            <button onclick="resetGame()">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        const ROWS = 10;
+        const COLS = 10;
+        const MINES_COUNT = 15;
+        
+        let grid = [];
+        let minesLocation = [];
+        let tilesClicked = 0;
+        let flags = 0;
+        let gameOver = false;
+        let timer = 0;
+        let timerInterval;
+        let firstClick = true;
+
+        const gridElement = document.getElementById('grid');
+        const minesCountElement = document.getElementById('mines-count');
+        const timerElement = document.getElementById('timer');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMsg = document.getElementById('modal-msg');
+
+        function initGame() {
+            grid = [];
+            minesLocation = [];
+            tilesClicked = 0;
+            flags = 0;
+            gameOver = false;
+            timer = 0;
+            firstClick = true;
+            clearInterval(timerInterval);
+            timerElement.innerText = "TIME: 000";
+            minesCountElement.innerText = `BOMBS: ${MINES_COUNT}`;
+            modal.style.display = 'none';
+            
+            createGrid();
+        }
+
+        function createGrid() {
+            gridElement.innerHTML = '';
+            gridElement.style.gridTemplateColumns = `repeat(${COLS}, 40px)`;
+            gridElement.style.gridTemplateRows = `repeat(${ROWS}, 40px)`;
+
+            for (let r = 0; r < ROWS; r++) {
+                let row = [];
+                for (let c = 0; c < COLS; c++) {
+                    let tile = document.createElement('div');
+                    tile.id = r.toString() + "-" + c.toString();
+                    tile.classList.add('cell', 'hidden');
+                    tile.addEventListener('click', clickTile);
+                    tile.addEventListener('contextmenu', placeFlag);
+                    gridElement.append(tile);
+                    row.push(tile);
+                }
+                grid.push(row);
+            }
+        }
+
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                timer++;
+                timerElement.innerText = "TIME: " + timer.toString().padStart(3, '0');
+            }, 1000);
+        }
+
+        function placeMines(excludeR, excludeC) {
+            let minesLeft = MINES_COUNT;
+            while (minesLeft > 0) {
+                let r = Math.floor(Math.random() * ROWS);
+                let c = Math.floor(Math.random() * COLS);
+                let id = r.toString() + "-" + c.toString();
+
+                // Don't place mine on first click or if already there
+                if (!minesLocation.includes(id) && (r !== excludeR || c !== excludeC)) {
+                    minesLocation.push(id);
+                    minesLeft--;
+                }
+            }
+        }
+
+        function placeFlag(e) {
+            e.preventDefault();
+            if (gameOver) return;
+            
+            let tile = this;
+            if (!tile.classList.contains('hidden')) return;
+
+            if (tile.classList.contains('flagged')) {
+                tile.classList.remove('flagged');
+                flags--;
+            } else {
+                tile.classList.add('flagged');
+                flags++;
+            }
+            minesCountElement.innerText = `BOMBS: ${MINES_COUNT - flags}`;
+        }
+
+        function clickTile() {
+            if (gameOver || this.classList.contains('flagged')) return;
+
+            let coords = this.id.split("-");
+            let r = parseInt(coords[0]);
+            let c = parseInt(coords[1]);
+
+            if (firstClick) {
+                firstClick = false;
+                placeMines(r, c);
+                startTimer();
+            }
+
+            if (minesLocation.includes(this.id)) {
+                gameOver = true;
+                revealMines();
+                showModal(false);
+                return;
+            }
+
+            checkMine(r, c);
+        }
+
+        function revealMines() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    let tile = grid[r][c];
+                    if (minesLocation.includes(tile.id)) {
+                        tile.classList.remove('hidden');
+                        tile.classList.add('revealed', 'mine');
+                        tile.innerText = "💣";
+                    }
+                }
+            }
+        }
+
+        function checkMine(r, c) {
+            if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return;
+            let tile = grid[r][c];
+            if (!tile.classList.contains('hidden')) return;
+
+            tile.classList.remove('hidden');
+            tile.classList.add('revealed');
+            tilesClicked++;
+
+            let minesFound = 0;
+
+            // Check neighbors
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    minesFound += checkTile(r + i, c + j);
+                }
+            }
+
+            if (minesFound > 0) {
+                tile.innerText = minesFound;
+                tile.setAttribute('data-num', minesFound);
+            } else {
+                // Recursively check neighbors if 0
+                for (let i = -1; i <= 1; i++) {
+                    for (let j = -1; j <= 1; j++) {
+                        checkMine(r + i, c + j);
+                    }
+                }
+            }
+
+            if (tilesClicked == ROWS * COLS - MINES_COUNT) {
+                gameOver = true;
+                showModal(true);
+            }
+        }
+
+        function checkTile(r, c) {
+            if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return 0;
+            if (minesLocation.includes(r.toString() + "-" + c.toString())) return 1;
+            return 0;
+        }
+
+        function showModal(win) {
+            clearInterval(timerInterval);
+            modal.style.display = 'flex';
+            if (win) {
+                modalTitle.innerText = "COURSE CLEAR!";
+                modalTitle.style.color = "#2ecc71";
+                modalMsg.innerText = `You cleared it in ${timer} seconds!`;
+            } else {
+                modalTitle.innerText = "GAME OVER";
+                modalTitle.style.color = "#c0392b";
+                modalMsg.innerText = "You hit a Bob-omb!";
+            }
+        }
+
+        function resetGame() {
+            initGame();
+        }
+
+        // Start
+        initGame();
+
+    </script>
+</body>
+</html>
