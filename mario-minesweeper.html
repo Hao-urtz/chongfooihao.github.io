@@ -88,15 +88,17 @@
 
         /* Animation for moving blocks */
         @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-3px); }
+            0%, 100% { transform: translateY(0) translateX(0); }
+            25% { transform: translateY(-3px) translateX(2px); }
+            50% { transform: translateY(0) translateX(0); }
+            75% { transform: translateY(3px) translateX(-2px); }
         }
 
         /* Stagger animations slightly for a wave effect */
-        .cell:nth-child(2n).hidden { animation-delay: 0.1s; }
-        .cell:nth-child(3n).hidden { animation-delay: 0.2s; }
-        .cell:nth-child(5n).hidden { animation-delay: 0.3s; }
-        .cell:nth-child(7n).hidden { animation-delay: 0.4s; }
+        .cell:nth-child(2n).hidden { animation-delay: 0.1s; animation-duration: 2.5s; }
+        .cell:nth-child(3n).hidden { animation-delay: 0.2s; animation-duration: 3.2s; }
+        .cell:nth-child(5n).hidden { animation-delay: 0.3s; animation-duration: 2.8s; }
+        .cell:nth-child(7n).hidden { animation-delay: 0.4s; animation-duration: 3.5s; }
 
         /* Revealed State - Empty Block */
         .cell.revealed {
@@ -216,6 +218,7 @@
         let gameOver = false;
         let timer = 0;
         let timerInterval;
+        let shuffleInterval;
         let firstClick = true;
 
         const gridElement = document.getElementById('grid');
@@ -234,6 +237,7 @@
             timer = 0;
             firstClick = true;
             clearInterval(timerInterval);
+            clearInterval(shuffleInterval);
             timerElement.innerText = "TIME: 000";
             minesCountElement.innerText = `BOMBS: ${MINES_COUNT}`;
             modal.style.display = 'none';
@@ -266,6 +270,81 @@
                 timer++;
                 timerElement.innerText = "TIME: " + timer.toString().padStart(3, '0');
             }, 1000);
+        }
+
+        function startShuffle() {
+            shuffleInterval = setInterval(() => {
+                if (gameOver) return;
+                shuffleMines();
+            }, 5000);
+        }
+
+        function shuffleMines() {
+            // 1. Identify hidden cells
+            let hiddenCells = [];
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    let tile = grid[r][c];
+                    if (tile.classList.contains('hidden')) {
+                        hiddenCells.push(tile.id);
+                    }
+                }
+            }
+
+            // 2. Redistribute mines among hidden cells
+            // We keep the same number of mines, but move them to new hidden spots
+            // Note: If we have flagged cells, we should probably keep mines under flags? 
+            // Or just let them move? Standard dynamic minesweeper usually moves them randomly.
+            // Let's move them completely randomly among hidden cells.
+            
+            minesLocation = [];
+            let minesLeft = MINES_COUNT;
+            
+            // Safety check: if fewer hidden cells than mines, we can't place them all (shouldn't happen in normal play)
+            if (hiddenCells.length < MINES_COUNT) return;
+
+            while (minesLeft > 0) {
+                let randomIndex = Math.floor(Math.random() * hiddenCells.length);
+                let id = hiddenCells[randomIndex];
+                
+                if (!minesLocation.includes(id)) {
+                    minesLocation.push(id);
+                    minesLeft--;
+                }
+            }
+
+            // 3. Update numbers on revealed cells
+            updateRevealedNumbers();
+            
+            // Visual feedback
+            gridElement.style.transform = "scale(1.02)";
+            setTimeout(() => gridElement.style.transform = "scale(1)", 200);
+        }
+
+        function updateRevealedNumbers() {
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    let tile = grid[r][c];
+                    if (!tile.classList.contains('hidden')) {
+                        // Recalculate neighbors
+                        let minesFound = 0;
+                        for (let i = -1; i <= 1; i++) {
+                            for (let j = -1; j <= 1; j++) {
+                                minesFound += checkTile(r + i, c + j);
+                            }
+                        }
+                        
+                        // Update display
+                        if (minesFound > 0) {
+                            tile.innerText = minesFound;
+                            tile.setAttribute('data-num', minesFound);
+                        } else {
+                            tile.innerText = "";
+                            tile.removeAttribute('data-num');
+                        }
+                    }
+                }
+            }
         }
 
         function placeMines(excludeR, excludeC) {
@@ -311,6 +390,7 @@
                 firstClick = false;
                 placeMines(r, c);
                 startTimer();
+                startShuffle();
             }
 
             if (minesLocation.includes(this.id)) {
@@ -380,6 +460,7 @@
 
         function showModal(win) {
             clearInterval(timerInterval);
+            clearInterval(shuffleInterval);
             modal.style.display = 'flex';
             if (win) {
                 modalTitle.innerText = "COURSE CLEAR!";
